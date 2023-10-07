@@ -132,12 +132,6 @@ class Program
 
         string subject = command.Data.Options?.FirstOrDefault(opt => opt.Name == "subject")?.Value as string;
 
-        var configBuilder = new ConfigurationBuilder()
-            .SetBasePath(Directory.GetCurrentDirectory())
-            .AddJsonFile("secrets.json");
-
-        IConfigurationRoot _config = configBuilder.Build();
-
         var newsApiKey = _config["NewsBot:NewsApiKey"];
         var newsApiClient = new NewsApiClient(newsApiKey);
 
