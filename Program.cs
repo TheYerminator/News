@@ -1,6 +1,7 @@
 ﻿using Discord;
 using Discord.Net;
 using Discord.WebSocket;
+using Microsoft.Extensions.Configuration;
 using NewsAPI;
 using NewsAPI.Constants;
 using NewsAPI.Models;
@@ -10,10 +11,21 @@ using System.Runtime.InteropServices;
 class Program
 {
     private DiscordSocketClient _client;
+    private readonly IConfiguration _config;
 
     static void Main(string[] args)
     {
-        string token = "MTE1NzM2MjY1OTc0MjcxMTg2MA.GnuUwc.a4NDh1i_LsWZ7jtFdL0niyxgqe3kgp8yrYTfNk";
+        var configBuilder = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("secrets.json");
+
+        IConfigurationRoot _config = configBuilder.Build();
+
+        Console.WriteLine(_config["NewsBot:TokenBot"]);
+        Console.WriteLine(_config["NewsBot:NewsAPIKey"]);
+
+
+        string token = _config["NewsBot:TokenBot"];
 
         new Program().RunBotAsync(token).GetAwaiter().GetResult();
     }
@@ -48,19 +60,6 @@ class Program
 
         await Task.Delay(-1);
     }
-
-    private static void MinimizeConsoleWindow()
-    {
-        var process = Process.GetCurrentProcess();
-        var handle = process.MainWindowHandle;
-
-        ShowWindow(handle, SW_MINIMIZE);
-    }
-
-    [DllImport("user32.dll")]
-    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-
-    private const int SW_MINIMIZE = 6;
 
     private Task Log(LogMessage arg)
     {
@@ -133,7 +132,14 @@ class Program
 
         string subject = command.Data.Options?.FirstOrDefault(opt => opt.Name == "subject")?.Value as string;
 
-        var newsApiClient = new NewsApiClient("078fc53a9f0e4cdd8a1af78a04298d55");
+        var configBuilder = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("secrets.json");
+
+        IConfigurationRoot _config = configBuilder.Build();
+
+        var newsApiKey = _config["NewsBot:NewsApiKey"];
+        var newsApiClient = new NewsApiClient(newsApiKey);
 
         if (subject != null)
         {
