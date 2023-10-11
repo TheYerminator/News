@@ -19,6 +19,8 @@ class Program
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile("secrets.json");
 
+        Console.WriteLine("Lecture du fichier de configuration...");
+
         IConfigurationRoot _config = configBuilder.Build();
 
         Console.WriteLine(_config["NewsBot:TokenBot"]);
