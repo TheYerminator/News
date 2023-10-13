@@ -5,29 +5,20 @@ using Microsoft.Extensions.Configuration;
 using NewsAPI;
 using NewsAPI.Constants;
 using NewsAPI.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 class Program
 {
-    private DiscordSocketClient _client;
-    private readonly IConfiguration _config;
+    private DiscordSocketClient? _client;
 
     static void Main(string[] args)
     {
-        var configBuilder = new ConfigurationBuilder()
-            .SetBasePath(Directory.GetCurrentDirectory())
-            .AddJsonFile("secrets.json");
-
-        Console.WriteLine("Lecture du fichier de configuration...");
-
-        IConfigurationRoot _config = configBuilder.Build();
-
-        Console.WriteLine(_config["NewsBot:TokenBot"]);
-        Console.WriteLine(_config["NewsBot:NewsAPIKey"]);
-
-
-        string token = _config["NewsBot:TokenBot"];
+        var jsonString = File.ReadAllText("secrets.json");
+        var jsonObject = JObject.Parse(jsonString);
+        string? token = jsonObject["NewsBot"]?["TokenBot"]?.ToString();
 
         new Program().RunBotAsync(token).GetAwaiter().GetResult();
     }
@@ -134,7 +125,10 @@ class Program
 
         string subject = command.Data.Options?.FirstOrDefault(opt => opt.Name == "subject")?.Value as string;
 
-        var newsApiKey = _config["NewsBot:NewsApiKey"];
+        var jsonString = File.ReadAllText("secrets.json");
+        var jsonObject = JObject.Parse(jsonString);
+        string? newsApiKey = jsonObject["NewsBot"]?["NewsAPIKey"]?.ToString();
+
         var newsApiClient = new NewsApiClient(newsApiKey);
 
         if (subject != null)
