@@ -27,15 +27,13 @@ class Program
     {
         if (_client != null)
         {
-            Console.WriteLine("Mise à jour de la présence...");
-
             try
             {
                 await _client.SetActivityAsync(new Discord.Game("📰 - Monitor the news - 📰"));
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Erreur lors de la mise à jour de la présence : {ex.Message}");
+                await Log(new LogMessage(LogSeverity.Error, "UpdatePresenceAsync", $"Erreur lors de la mise à jour de la présence : {ex.Message}"));
             }
         }
     }
@@ -56,20 +54,28 @@ class Program
 
     private Task Log(LogMessage arg)
     {
-        Console.WriteLine(arg);
+        string logEntry = $"{DateTime.Now} [{arg.Severity}] {arg.Source}: {arg.Message}";
+        Console.WriteLine(logEntry);
+        using (StreamWriter sw = new StreamWriter("logs.txt"))
+        {
+                sw.WriteLine(logEntry);
+        }
         return Task.CompletedTask;
     }
 
     public class Article
     {
-        public string title { get; set; }
-        public string url { get; set; }
+        public string? Title { get; set; }
+        public string? Url { get; set; }
+        public string? Content { get; set; }
+        public string? Author { get; set; }
+        public string? UrlToImage { get; set; }
     }
 
     public class NewsApiResponse
     {
-        public string status { get; set; }
-        public List<Article> articles { get; set; }
+        public string? status { get; set; }
+        public List<Article>? articles { get; set; }
     }
 
     private List<string> sentArticles = new List<string>();
@@ -115,11 +121,11 @@ class Program
         int countValue;
         if (countOption?.Value != null && int.TryParse(countOption.Value.ToString(), out countValue))
         {
-            Console.WriteLine($"Count Value: {countValue}");
+            await Log(new LogMessage(LogSeverity.Info, "SlashCommandHandler", $"Count Value: {countValue}"));
         }
         else
         {
-            Console.WriteLine($"Using default count: 5");
+            await Log(new LogMessage(LogSeverity.Info, "SlashCommandHandler", $"Using default count: 5"));
             countValue = 5;
         }
 
@@ -149,30 +155,30 @@ class Program
                 {
                     if (!sentArticles.Contains(article.Url))
                     {
-                        Random random = new Random();
-                        Discord.Color randomColor = new Discord.Color(random.Next(256), random.Next(256), random.Next(256));
-
-                        var embed = new EmbedBuilder()
-                            .WithTitle(article.Title)
-                            .WithDescription(article.Content)
-                            .WithColor((Discord.Color)randomColor)
-                            .WithAuthor(article.Author)
-                            .WithImageUrl(article.UrlToImage)
-                            //.WithThumbnailUrl(article.UrlToImage)
-                            .AddField("Article :", article.Url, true)
-                            //.AddField("Field 2", "Value 2", true)
-                            //.AddField("Field 3", "Value 3", false)
-                            .WithCurrentTimestamp()
-                            .Build();
-
-
-                        await command.Channel.SendMessageAsync(embed: embed);
-
+                        await SendArticle(command.Channel, article);
                         sentArticles.Add(article.Url);
-                        Thread.Sleep(100);
+                        await Task.Delay(100);
                     }
                 }
             }
         }
+    }
+
+    private async Task SendArticle(ISocketMessageChannel channel, NewsAPI.Models.Article article)
+    {
+        Random random = new Random();
+        Discord.Color randomColor = new Discord.Color(random.Next(256), random.Next(256), random.Next(256));
+
+        var embed = new EmbedBuilder()
+            .WithTitle(article.Title)
+            .WithDescription(article.Content)
+            .WithColor(randomColor)
+            .WithAuthor(article.Author)
+            .WithImageUrl(article.UrlToImage)
+            .AddField("Article", article.Url, true)
+            .WithCurrentTimestamp()
+            .Build();
+
+        await channel.SendMessageAsync(embed: embed);
     }
 }
