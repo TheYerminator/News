@@ -1,1 +1,8 @@
+# Exclure secrets.json à la racine
 secrets.json
+
+# Exclure les dossiers générés par Visual Studio
+.vs/
+/bin/
+/obj/
+/Properties/PublishProfiles/
