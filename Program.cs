@@ -1,24 +1,31 @@
 ﻿using Discord;
 using Discord.Net;
 using Discord.WebSocket;
-using Microsoft.Extensions.Configuration;
 using NewsAPI;
 using NewsAPI.Constants;
 using NewsAPI.Models;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
 
 class Program
 {
     private DiscordSocketClient? _client;
+    private static List<string> sentArticles;
 
     static void Main(string[] args)
     {
         var jsonString = File.ReadAllText("secrets.json");
         var jsonObject = JObject.Parse(jsonString);
         string? token = jsonObject["NewsBot"]?["TokenBot"]?.ToString();
+
+        if (File.Exists("articles.txt"))
+        {
+            sentArticles = File.ReadAllLines("articles.txt").ToList();
+        }
+        else
+        {
+            FileStream fs = File.Create("articles.txt");
+            fs.Close();
+        }
 
         new Program().RunBotAsync(token).GetAwaiter().GetResult();
     }
@@ -30,6 +37,7 @@ class Program
             try
             {
                 await _client.SetActivityAsync(new Discord.Game("📰 - Monitor the news - 📰"));
+
             }
             catch (Exception ex)
             {
@@ -40,7 +48,12 @@ class Program
 
     public async Task RunBotAsync(string token)
     {
-        _client = new DiscordSocketClient();
+        var config = new DiscordSocketConfig
+        {
+            GatewayIntents = GatewayIntents.Guilds | GatewayIntents.GuildMessages
+        };
+
+        _client = new DiscordSocketClient(config);
         _client.Log += Log;
 
         await _client.LoginAsync(TokenType.Bot, token);
@@ -56,10 +69,7 @@ class Program
     {
         string logEntry = $"{DateTime.Now} [{arg.Severity}] {arg.Source}: {arg.Message}";
         Console.WriteLine(logEntry);
-        using (StreamWriter sw = new StreamWriter("logs.txt"))
-        {
-                sw.WriteLine(logEntry);
-        }
+        File.AppendAllText("logs.txt", logEntry + Environment.NewLine);
         return Task.CompletedTask;
     }
 
@@ -74,11 +84,9 @@ class Program
 
     public class NewsApiResponse
     {
-        public string? status { get; set; }
-        public List<Article>? articles { get; set; }
+        public string? Status { get; set; }
+        public List<NewsAPI.Models.Article>? articles { get; set; }
     }
-
-    private List<string> sentArticles = new List<string>();
 
     private async Task OnReady()
     {
@@ -117,50 +125,59 @@ class Program
 
     private async Task SlashCommandHandler(SocketSlashCommand command)
     {
-        var countOption = command.Data.Options?.FirstOrDefault(opt => opt.Name == "count");
-        int countValue;
-        if (countOption?.Value != null && int.TryParse(countOption.Value.ToString(), out countValue))
+        try
         {
-            await Log(new LogMessage(LogSeverity.Info, "SlashCommandHandler", $"Count Value: {countValue}"));
-        }
-        else
-        {
-            await Log(new LogMessage(LogSeverity.Info, "SlashCommandHandler", $"Using default count: 5"));
-            countValue = 5;
-        }
-
-        string subject = command.Data.Options?.FirstOrDefault(opt => opt.Name == "subject")?.Value as string;
-
-        var jsonString = File.ReadAllText("secrets.json");
-        var jsonObject = JObject.Parse(jsonString);
-        string? newsApiKey = jsonObject["NewsBot"]?["NewsAPIKey"]?.ToString();
-
-        var newsApiClient = new NewsApiClient(newsApiKey);
-
-        if (subject != null)
-        {
-            var articlesResponse = newsApiClient.GetTopHeadlines(new TopHeadlinesRequest
+            var countOption = command.Data.Options?.FirstOrDefault(opt => opt.Name == "count");
+            int countValue;
+            if (countOption?.Value != null && int.TryParse(countOption.Value.ToString(), out countValue))
             {
-                Category = Enum.Parse<Categories>(subject, true),
-                Page = countValue,
-                PageSize = countValue,
-                Language = Languages.FR,
-            });
-
-
-
-            if (articlesResponse.Status == Statuses.Ok)
+                await Log(new LogMessage(LogSeverity.Info, "SlashCommandHandler", $"Count Value: {countValue}"));
+            }
+            else
             {
-                foreach (var article in articlesResponse.Articles)
+                await Log(new LogMessage(LogSeverity.Info, "SlashCommandHandler", $"Using default count: 5"));
+                countValue = 5;
+            }
+
+            string? subject = command.Data.Options?.FirstOrDefault(opt => opt.Name == "subject")?.Value as string;
+
+            await Log(new LogMessage(LogSeverity.Info, "SlashCommandHandler", $"Sujet: {subject}"));
+
+            var jsonString = File.ReadAllText("secrets.json");
+            var jsonObject = JObject.Parse(jsonString);
+            string? newsApiKey = jsonObject["NewsBot"]?["NewsAPIKey"]?.ToString();
+
+            var newsApiClient = new NewsApiClient(newsApiKey);
+
+            if (subject != null)
+            {
+                var articlesResponse = newsApiClient.GetTopHeadlines(new TopHeadlinesRequest
                 {
-                    if (!sentArticles.Contains(article.Url))
+                    Category = Enum.Parse<Categories>(subject, true),
+                    Page = countValue,
+                    PageSize = countValue,
+                    Language = Languages.FR,
+                });
+
+
+
+                if (articlesResponse.Status == Statuses.Ok)
+                {
+                    foreach (var article in articlesResponse.Articles)
                     {
-                        await SendArticle(command.Channel, article);
-                        sentArticles.Add(article.Url);
-                        await Task.Delay(100);
+                        if (!sentArticles.Contains(article.Title))
+                        {
+                            await SendArticle(command.Channel, article);
+                            File.AppendAllText("articles.txt", article.Title + Environment.NewLine);
+                            await Task.Delay(100);
+                        }
                     }
                 }
             }
+        }
+        catch (Exception ex)
+        {
+            await Log(new LogMessage(LogSeverity.Error, "SlashCommandHandler", $"An error occurred: {ex.Message}"));
         }
     }
 
@@ -175,10 +192,12 @@ class Program
             .WithColor(randomColor)
             .WithAuthor(article.Author)
             .WithImageUrl(article.UrlToImage)
-            .AddField("Article", article.Url, true)
+            .AddField("Article", $"[Lire l'article]({article.Url})", true)
             .WithCurrentTimestamp()
             .Build();
 
-        await channel.SendMessageAsync(embed: embed);
+        var flags = MessageFlags.SuppressNotification;
+
+        await channel.SendMessageAsync(null, false, embed: embed, options: null, embeds: null, allowedMentions: null, flags: flags);
     }
 }
